@@ -1,0 +1,40 @@
+services:
+  rag-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-chatbot-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # In Docker network, connect to dedicated chromadb container
+      - CHROMA_MODE=http
+      - CHROMA_SERVER_HOST=chromadb
+      - CHROMA_SERVER_PORT=8000
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    volumes:
+      - ./data/app_data:/app/data
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: rag-chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000" # Accessible on host as http://localhost:8001
+    volumes:
+      - ./data/chroma_db:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      # chromadb:latest uses minimal base image without curl; test TCP socket directly via bash
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
